@@ -1,17 +1,29 @@
 from mcp.server.fastmcp import FastMCP
 import sqlite3
+import os
 
 # Initialize the MCP Server
 mcp = FastMCP("BusinessOpsAgent")
 
-# TOOL 1: Check Inventory
+# --- PRO FIX: ALWAYS FIND THE DATABASE ---
+# Get the directory where THIS script is located
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# Build the full path to the database
+DB_PATH = os.path.join(BASE_DIR, 'business.db')
+
 @mcp.tool()
 def check_stock(item_name: str) -> str:
     """Check the quantity of a specific item in the inventory."""
-    conn = sqlite3.connect('business.db')
+    # Use the absolute path (DB_PATH) instead of just 'business.db'
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
-    # We use SQL LIKE to find partial matches (e.g. "Potato" finds "Potato Sacks")
+    # Check if table exists first (to avoid crashes if DB is empty)
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='inventory'")
+    if not cursor.fetchone():
+        conn.close()
+        return "Error: The inventory table does not exist. Please run db_setup.py."
+
     cursor.execute("SELECT quantity FROM inventory WHERE item_name LIKE ?", (f"%{item_name}%",))
     result = cursor.fetchone()
     conn.close()
@@ -21,11 +33,10 @@ def check_stock(item_name: str) -> str:
     else:
         return f"I couldn't find {item_name} in the inventory."
 
-# TOOL 2: Add Inventory (Action)
 @mcp.tool()
 def add_stock(item_name: str, quantity: int) -> str:
     """Add new stock to the inventory."""
-    conn = sqlite3.connect('business.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
     cursor.execute("SELECT quantity FROM inventory WHERE item_name LIKE ?", (f"%{item_name}%",))
@@ -44,5 +55,4 @@ def add_stock(item_name: str, quantity: int) -> str:
     return msg
 
 if __name__ == "__main__":
-    # This keeps the server running so Claude can talk to it
     mcp.run()
